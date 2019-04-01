@@ -1,0 +1,9 @@
+[package]
+name = "macro_test"
+version = "0.1.0"
+authors = ["James Munns <james.munns@ferrous-systems.com>"]
+edition = "2018"
+
+[dependencies]
+bare-metal = "0.2"
+cortex-m = "0.5.8"
