@@ -1,4 +1,4 @@
-# CMIM - Cortex-M Interrupt Data
+# CMID - Cortex-M Interrupt Data
 
 The following is the desired end goal of this project. We're not there yet.
 
