@@ -4,7 +4,58 @@
 
 The following is the desired end goal of this project. We're not there yet.
 
-## Stage 1 - Moving data to interrupts
+## What it looks like now
+
+```rust
+shared!(
+    (RADIO_PKTS, usize, Interrupt::RADIO),
+    (WALL_CLOCK, usize, Interrupt::RTC0),
+);
+
+#[allow(dead_code)]
+fn main() {
+    // Using a `shared` data item in non-interrupt context
+    // requires a token. This is a singleton, sort of like
+    // the peripherals from a peripheral access crate
+    let mut token = RADIO_PKTS::set_initial(27).unwrap();
+
+    // You access the data from within a closure. The interrupt
+    // this data is shared with is disabled for the duration of
+    // the closure. Other interrupts may still occur.
+    token.modify_app_context(|y| {
+        *y -= 1;
+        y
+    }).unwrap();
+}
+
+#[interrupt]
+fn RADIO() {
+    // Within an interrupt, access is only granted if it matches
+    // the declared interrupt. Inside the `RADIO` interrupt here,
+    // only `RADIO_PKTS` is accessible.
+    //
+    // Access from within an interrupt doesn't require a token.
+    RADIO_PKTS::modify_int_context(|x| {
+        *x += 1;
+        x
+    }).unwrap();
+}
+
+#[interrupt]
+fn FOO() {
+    // If `set_initial` was never called, then all attempts to
+    // access will return an `Err`. This code would panic at
+    // runtime!
+    BAZ::modify_int_context(|x| {
+        *x += 1;
+        x
+    }).unwrap();
+}
+```
+
+## The original idea
+
+### Stage 1 - Moving data to interrupts
 
 ```rust
 use nrf52832_pac::Interrupt;
@@ -47,7 +98,7 @@ fn UARTE0_UARTE() {
 }
 ```
 
-## Stage 2 - Sharing data with a single interrupt
+### Stage 2 - Sharing data with a single interrupt
 
 ```rust
 use nrf52832_pac::Interrupt;
@@ -96,6 +147,6 @@ fn RADIO() {
 }
 ```
 
-## Stage 3 - Sharing data between interrupts
+### Stage 3 - Sharing data between interrupts
 
 I have no idea how to do this without the possibility of deadlock. Maybe specify multiple interrupts in `cmim!()`, and critical section all of them at once? Maybe do priority elevation like RTFM?
