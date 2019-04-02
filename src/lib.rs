@@ -7,21 +7,8 @@ mod tests {
 }
 
 use bare_metal::Nr;
-use cortex_m::peripheral::NVIC;
 
-macro_rules! cmim {
-    (
-        $(($name:ident, $bool_name:ident, $set_fn:ident, $get_fn:ident, $int:expr, $dat:ty),)+
-    ) => {
-        pub static $name: Option<$dat> = None;
-
-        pub fn $set_fn(data: $dat) {
-
-        }
-
-    }
-}
-
+#[allow(dead_code)]
 enum IntStub {
     Foo,
     Bar,
@@ -38,80 +25,138 @@ unsafe impl Nr for IntStub {
 
 macro_rules! cmim {
     (
-        $(($name:ident, $bool_name:ident, $set_fn:ident, $get_fn:ident, $int:expr, $dat:ty),)+
+        $(($NAME:ident, $dat_ty:ty, $int:expr),)+
     ) => {
-        pub mod interrupt_data {
-            use super::*;
-            $(
-                static mut $name: Option<$dat> = None;
-                static $bool_name: ::core::sync::atomic::AtomicBool = ::core::sync::atomic::AtomicBool::new(false);
+        $(
+            #[allow(non_snake_case)]
+            pub mod $NAME {
+                use super::*;
+                use ::core::sync::atomic::Ordering;
 
-                /// Setter function for $name. $int must not be enabled or
-                /// currently active.
-                pub fn $set_fn(data: $dat) {
-                    assert!(!int_is_enabled($int));
-                    assert!(!$bool_name.load(::core::sync::atomic::Ordering::SeqCst));
+                pub struct AppToken {
+                    _private: ()
+                }
 
-                    unsafe {
-                        $name = Some(data);
+                static mut $NAME: Option<$dat_ty> = None;
+
+                mod flag {
+                    use ::core::sync::atomic::AtomicBool;
+                    pub static $NAME: AtomicBool = AtomicBool::new(false);
+                }
+
+                impl AppToken {
+                    pub fn set_initial(data: $dat_ty) -> Result<AppToken, $dat_ty> {
+                        if int_is_enabled() || flag::$NAME.load(Ordering::SeqCst) {
+                            return Err(data);
+                        }
+
+                        if unsafe { $NAME.is_none() } {
+                            unsafe {
+                                $NAME = Some(data);
+                            }
+                            Ok(AppToken { _private: () })
+                        } else {
+                            Err(data)
+                        }
+                    }
+
+                    pub fn modify_app_context<F>(&mut self, f: F) -> Result<(), ()>
+                    where
+                        for<'w> F: FnOnce(&'w mut $dat_ty) -> &'w mut $dat_ty,
+                    {
+                        // theoretical race condition: if an interrupt enables this interrupt between
+                        // the next line and the line after
+                        let enabled = int_is_enabled();
+                        if enabled {
+                            disable_int();
+                        }
+                        if int_is_active() || unsafe { $NAME.is_none() } {
+                            if enabled {
+                                enable_int();
+                            }
+                            return Err(());
+                        }
+
+                        unsafe {
+                            f($NAME.as_mut().unwrap());
+                        }
+
+                        if enabled {
+                            enable_int();
+                        }
+
+                        Ok(())
+                    }
+
+                    pub fn modify_int_context<F>(f: F) -> Result<(), ()>
+                    where
+                        for<'w> F: FnOnce(&'w mut $dat_ty) -> &'w mut $dat_ty,
+                    {
+                        if !int_is_active() || unsafe { $NAME.is_none() } || flag::$NAME.swap(true, Ordering::SeqCst) {
+                            return Err(());
+                        }
+
+                        unsafe {
+                            f($NAME.as_mut().unwrap());
+                        }
+
+                        assert!(flag::$NAME.swap(false, Ordering::SeqCst));
+                        Ok(())
+
                     }
                 }
 
-                /// Getter function for $name. Not re-entrant. Must only be called from
-                /// within the $int interrupt. Gain mutable access to $name for the duration
-                /// of a given closure.
-                pub fn $get_fn<F>(f: F)
-                where
-                    for<'w> F: FnOnce(&'w mut $dat) -> &'w mut $dat,
-                    {
-                        assert!(int_is_active($int));
-                        assert!(!$bool_name.swap(true, ::core::sync::atomic::Ordering::SeqCst));
+                use ::cortex_m::peripheral::NVIC;
 
-                        unsafe {
-                            f($name.as_mut().unwrap());
-                        }
+                fn int_is_enabled() -> bool
+                {
 
-                        assert!($bool_name.swap(false, ::core::sync::atomic::Ordering::SeqCst));
-                    }
-            )+
+                    let nr = $int.nr();
+                    let mask = 1 << (nr % 32);
 
-            fn int_is_enabled<I>(interrupt: I) -> bool
-            where
-                I: ::bare_metal::Nr,
-            {
+                    // NOTE(unsafe) atomic read with no side effects
+                    unsafe { ((*NVIC::ptr()).iser[usize::from(nr / 32)].read() & mask) == mask }
+                }
 
-                let nr = interrupt.nr();
-                let mask = 1 << (nr % 32);
+                fn int_is_active() -> bool
+                {
+                    let nr = $int.nr();
+                    let mask = 1 << (nr % 32);
 
-                // NOTE(unsafe) atomic read with no side effects
-                unsafe { ((*::cortex_m::peripheral::NVIC::ptr()).iser[usize::from(nr / 32)].read() & mask) == mask }
+                    // NOTE(unsafe) atomic read with no side effects
+                    unsafe { ((*NVIC::ptr()).iabr[usize::from(nr / 32)].read() & mask) == mask }
+                }
+
+                fn disable_int()
+                {
+                    let nr = $int.nr();
+
+                    unsafe { (*NVIC::ptr()).icer[usize::from(nr / 32)].write(1 << (nr % 32)) }
+                }
+
+                /// Enables `interrupt`
+                fn enable_int()
+                {
+                    let nr = $int.nr();
+
+                    unsafe { (*NVIC::ptr()).iser[usize::from(nr / 32)].write(1 << (nr % 32)) }
+                }
             }
-
-            pub fn int_is_active<I>(interrupt: I) -> bool
-            where
-                I: ::bare_metal::Nr,
-            {
-                let nr = interrupt.nr();
-                let mask = 1 << (nr % 32);
-
-                // NOTE(unsafe) atomic read with no side effects
-                unsafe { ((*::cortex_m::peripheral::NVIC::ptr()).iabr[usize::from(nr / 32)].read() & mask) == mask }
-            }
-        }
+        )+
     }
 }
 
 cmim!(
-    (BAZ, BAZ_FLAG, set_baz, get_baz, IntStub::Foo, usize),
+    (BAZ, usize, IntStub::Foo),
 );
 
+#[allow(dead_code)]
 fn main() {
-    interrupt_data::set_baz(123);
+    let mut token = BAZ::AppToken::set_initial(27).unwrap();
+    token.modify_app_context(|y| { *y -= 1; y }).unwrap();
+}
 
-    interrupt_data::get_baz(
-        |x| {
-            *x += 20;
-            x
-        }
-    );
+#[allow(non_snake_case, dead_code)]
+fn DEMO_INT() {
+    BAZ::AppToken::modify_int_context(|x| { *x += 1; x }).unwrap();
 }
