@@ -67,11 +67,12 @@ macro_rules! shared {
     ) => {
         /// Re-export all the structures at the top level, making them
         /// visible at the scope the macro was used (not necessarily global!)
-        pub use shared::structs::*;
+        pub use shared_internals::structs::*;
 
         /// This module is basically just here to hide all of the stuff
         /// from being public
-        pub mod shared {
+        #[doc(hidden)]
+        pub mod shared_internals {
 
             /// These are the actual data structures that back the
             /// shared data
