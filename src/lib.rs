@@ -1,11 +1,13 @@
+#![no_std]
+
 #[macro_export]
-macro_rules! cmim {
+macro_rules! shared {
     (
         $(($NAME:ident, $dat_ty:ty, $int:expr),)+
     ) => {
-        pub use cmim::structs::*;
+        pub use shared::structs::*;
 
-        pub mod cmim {
+        pub mod shared {
             mod singletons {
                 $(
                     pub static mut $NAME: Option<$dat_ty> = None;
@@ -137,19 +139,3 @@ macro_rules! cmim {
         }
     }
 }
-
-// cmim!(
-//     (BAZ, usize, Interrupt::Foo),
-//     (BAX, usize, Interrupt::Bar),
-// );
-
-// #[allow(dead_code)]
-// fn main() {
-//     let mut token = BAZ::set_initial(27).unwrap();
-//     token.modify_app_context(|y| { *y -= 1; y }).unwrap();
-// }
-
-// #[allow(non_snake_case, dead_code)]
-// fn DEMO_INT() {
-//     BAZ::modify_int_context(|x| { *x += 1; x }).unwrap();
-// }

@@ -1,8 +1,13 @@
 [package]
-name = "cmid"
+name = "shared"
 version = "0.1.0"
 authors = ["James Munns <james.munns@ferrous-systems.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jamesmunns/shared"
+documentation = "https://docs.rs/shared"
+description = "A macro for safely sharing data between application and interrupt context on cortex-m systems"
+readme = "README.md"
 
 [dependencies]
 bare-metal = "0.2"
