@@ -2,7 +2,9 @@
 
 **A macro for safely sharing data between application and interrupt context on cortex-m systems**
 
-The following is the desired end goal of this project. We're not there yet.
+> **NOTE**: This code is still an early work in progress!
+
+* [Documentation](https://docs.rs/uhr)
 
 ## What it looks like now
 
@@ -48,7 +50,7 @@ fn RADIO() {
 }
 
 #[interrupt]
-fn FOO() {
+fn RTC0() {
     // If `set_initial` was never called, then all attempts to
     // access will return an `Err`. This code would panic at
     // runtime!
@@ -60,6 +62,8 @@ fn FOO() {
 ```
 
 ## The original idea
+
+The following is the desired end goal of this project. We're not there yet.
 
 ### Stage 1 - Moving data to interrupts
 
