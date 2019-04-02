@@ -7,12 +7,18 @@ The following is the desired end goal of this project. We're not there yet.
 ## What it looks like now
 
 ```rust
+use nrf52832_pac::Interrupt;
+use bare_metal;
+use cortex_m;
+
+// Tuples are of the format:
+//  (VARIABLE_NAME, VARIABLE_TYPE, CORRESPONDING_INTERRUPT),
 shared!(
     (RADIO_PKTS, usize, Interrupt::RADIO),
     (WALL_CLOCK, usize, Interrupt::RTC0),
 );
 
-#[allow(dead_code)]
+#[entry]
 fn main() {
     // Using a `shared` data item in non-interrupt context
     // requires a token. This is a singleton, sort of like
